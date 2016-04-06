@@ -6,10 +6,6 @@
 */
 
 #include "instrument.h"
-#define NCHAN 4
-
-
-uint16_t ch1=0,ch2=0,ch3=0,ch4=0;
 
 void ValidTaskIDChange_Handler(){
   PowerDue.taskIdValidTrigger();
@@ -111,7 +107,7 @@ void InstrumentPowerDue::startADC(){
   buffer[currentBuffer][6] |= (uint16_t)0x1000;
 
   // ADC writes to the DMA buffer
-  ADC->ADC_RPR=(uint32_t)(&(buffer[currentBuffer][(HEADER_SIZE/2)]));
+  ADC->ADC_RPR=(uint32_t)(&(buffer[currentBuffer][(HEADER_SIZE/2)-1]));
 
   ADC->ADC_RCR=(BUFFER_SIZE_FOR_USB-HEADER_SIZE);
 
@@ -126,7 +122,7 @@ void InstrumentPowerDue::startADC(){
   buffer[nextBuffer][6] |= (uint16_t)0x1000;
 
   // next DMA buffer
-  ADC->ADC_RNPR=(uint32_t)(&(buffer[nextBuffer][(HEADER_SIZE/2)]));
+  ADC->ADC_RNPR=(uint32_t)(&(buffer[nextBuffer][(HEADER_SIZE/2)-1]));
 
   //next dma receive counter
   ADC->ADC_RNCR=(BUFFER_SIZE_FOR_USB-HEADER_SIZE);
@@ -238,18 +234,11 @@ bool InstrumentPowerDue::bufferReady(){
 
 void InstrumentPowerDue::writeBuffer(HardwareSerial * port){
   int i=6;
-  int check=0;
-  int num_of_samples=0;
-
   // send it
+  // ADC takes to start
   while(((buffer[currentBuffer][i])>>12)!=1){
     i++;
   };
-
-  //The index to first data sample has been found
-  int j=i;
-
-  //Making sure the header is correct
   i-=6;
   if(i){
     buffer[currentBuffer][5+i] = (buffer[currentBuffer][5]-2*i);
@@ -260,33 +249,7 @@ void InstrumentPowerDue::writeBuffer(HardwareSerial * port){
     buffer[currentBuffer][0+i] = buffer[currentBuffer][0];
   }
 
-  //TODO: Should the higher bits be masked in case they store the channel info?
-  for(; (j+NCHAN)<=HEADER_SIZE+buffer[currentBuffer][5+i]; j+=(j+NCHAN)) {
-      ch1+=buffer[currentBuffer][j];
-      ch2+=buffer[currentBuffer][j+1];
-      ch3+=buffer[currentBuffer][j+2];
-      ch4+=buffer[currentBuffer][j+3];
-      check+=1;
-    }
-
-  num_of_samples=(buffer[currentBuffer][5+i]/8);
-  //Checking if the number of complete samples written is the same when calculated by length of data
-  if (check==num_of_samples){
-    port->write("corre");
-  }
-  else{
-        port->write("wrong");
-  }
-
-  buffer[currentBuffer][5+i] = (NCHAN * 2);
-  buffer[currentBuffer][6+i] = (ch1/num_of_samples);
-  buffer[currentBuffer][7+i] = (ch2/num_of_samples);
-  buffer[currentBuffer][8+i] = (ch3/num_of_samples);
-  buffer[currentBuffer][9+i] = (ch4/num_of_samples);
-
-
   port->write((uint8_t *)&(buffer[currentBuffer][i]),BUFFER_SIZE_FOR_USB);
- // port->write((uint8_t *)&(buffer[currentBuffer][i]),(HEADER_SIZE+(NCHAN*2)));
   currentBuffer=(currentBuffer+1)&(NUM_BUFFERS-1);
   return;
 }
